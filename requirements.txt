@@ -2,3 +2,4 @@ streamlit
 pandas
 CoolProp
 plotly
+paho-mqtt
