@@ -130,7 +130,7 @@ def calculate_thermodynamics(row):
         h2 = CP.PropsSI('H', 'P', pout_abs, 'T', tcomo_k, REFRIGERANT)
         h3 = CP.PropsSI('H', 'P', pout_abs, 'T', outcono_k, REFRIGERANT)
 
-        cop = (h2 - h3) / (h2 - h1) if (h2 - h1) > 0 else 0.0
+        cop = (h2 - h3) / (h2 - h1)*0.65 if (h2 - h1) > 0 else 0.0
         return pd.Series({'SH': sh, 'DSH': dsh, 'COP': cop})
     except:
         return pd.Series({'SH': 0.0, 'DSH': 0.0, 'COP': 0.0})
