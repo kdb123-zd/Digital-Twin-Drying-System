@@ -10,7 +10,6 @@ import json
 # ==========================================
 # 1. 页面基本配置
 # ==========================================
-# layout="wide" 让网页全屏铺满
 st.set_page_config(page_title="Bertram Digital Twin", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
@@ -25,7 +24,6 @@ MQTT_PASS = "bbbbb"
 
 @st.cache_resource
 def start_mqtt_client():
-    """使用 cache_resource 确保云端大屏只启动一次 MQTT 监听线程"""
     data_buffer = []
 
     def on_connect(client, userdata, flags, reason_code, properties=None):
@@ -71,15 +69,12 @@ sensor_data_pool = start_mqtt_client()
 # ==========================================
 st.markdown("""
 <style>
-    /* 调整整体背景和隐藏默认头部留白 */
     .stApp { background: radial-gradient(circle at center top, #0A1428 0%, #030712 100%); font-family: 'Segoe UI', sans-serif; }
     header {visibility: hidden;}
     .block-container { padding-top: 1rem; padding-bottom: 0rem; }
 
-    /* 缩小大标题的边距，整体向上提 */
-    .main-title { text-align: center; color: #E2E8F0; font-size: 28px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -50px; margin-bottom: 10px; }
+    .main-title { text-align: center; color: #E2E8F0; font-size: 28px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -10px; margin-bottom: 10px; }
 
-    /* [关键修改] 极大压缩卡片的内边距(padding)和外边距(margin-bottom)，防止屏幕超出 */
     .dual-card { background: linear-gradient(180deg, rgba(16, 33, 65, 0.6) 0%, rgba(5, 12, 25, 0.8) 100%); border: 1px solid rgba(0, 216, 255, 0.25); border-radius: 8px; padding: 6px 5px; margin-bottom: 10px; box-shadow: inset 0 0 15px rgba(0, 216, 255, 0.03), 0 2px 5px rgba(0,0,0,0.5); }
     .dc-title { color: #3399FF; font-size: 12px; font-weight: bold; margin-bottom: 3px; margin-left: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(51, 153, 255, 0.4); }
     .dc-row { display: flex; justify-content: space-evenly; align-items: center; }
@@ -89,7 +84,6 @@ st.markdown("""
     .dc-value { color: #00D8FF; font-size: 20px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 216, 255, 0.4); }
     .dc-unit { font-size: 10px; color: #64748B; font-weight: normal; }
 
-    /* [关键修改] 报警矩阵极致压缩，高度匹配 */
     .alert-matrix { display: flex; justify-content: space-between; gap: 6px; margin-top: 5px; margin-bottom: 0px; }
     .alert-box { flex: 1; padding: 6px 2px; border-radius: 6px; text-align: center; background: rgba(10, 20, 40, 0.8); border: 1px solid; display: flex; flex-direction: column; align-items: center; justify-content: center;}
     .alert-safe { border-color: rgba(16, 185, 129, 0.3); }
@@ -145,16 +139,26 @@ def dual_card(title, l1, v1, u1, l2, v2, u2):
     return f"""<div class="dual-card"><div class="dc-title">◈ {title}</div><div class="dc-row"><div class="dc-item"><div class="dc-label">{l1}</div><div class="dc-value">{v1} <span class="dc-unit">{u1}</span></div></div><div class="dc-divider"></div><div class="dc-item"><div class="dc-label">{l2}</div><div class="dc-value">{v2} <span class="dc-unit">{u2}</span></div></div></div></div>"""
 
 
-def create_gauge(value, title, max_val, color, suffix=""):
-    # [关键修改] 留足顶部空间t=45防止切字，整体高度压缩为160px省空间
-    fig = go.Figure(
-        go.Indicator(mode="gauge+number", value=value, number={'suffix': suffix, 'font': {'color': color, 'size': 20}},
-                     title={'text': title, 'font': {'color': '#3399FF', 'size': 12}}, gauge={
-                'axis': {'range': [None, max_val], 'tickwidth': 1, 'tickcolor': "#3399FF",
-                         'tickfont': {'color': '#94A3B8'}}, 'bar': {'color': color}, 'bgcolor': "rgba(0,0,0,0)",
-                'borderwidth': 1, 'bordercolor': "rgba(0, 216, 255, 0.2)",
-                'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]}))
-    fig.update_layout(height=160, margin=dict(l=10, r=10, t=45, b=0), paper_bgcolor="rgba(0,0,0,0)",
+# [核心修复1] 增加 dtick 参数，强制设置刻度步长
+def create_gauge(value, title, max_val, color, suffix="", dtick=None):
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=value,
+        number={'suffix': suffix, 'font': {'color': color, 'size': 20}},
+        title={'text': title, 'font': {'color': '#3399FF', 'size': 12}},
+        gauge={
+            # 引入 dtick 参数以增加刻度密度
+            'axis': {'range': [None, max_val], 'dtick': dtick, 'tickwidth': 1, 'tickcolor': "#3399FF",
+                     'tickfont': {'color': '#94A3B8'}},
+            'bar': {'color': color},
+            'bgcolor': "rgba(0,0,0,0)",
+            'borderwidth': 1,
+            'bordercolor': "rgba(0, 216, 255, 0.2)",
+            'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]
+        }
+    ))
+    # [核心修复2] 将 b=0 修改为 b=15，并相应增加 15px 的高度 (160->175)，防止最底部的 0 和 100 刻度被裁切
+    fig.update_layout(height=175, margin=dict(l=15, r=15, t=45, b=15), paper_bgcolor="rgba(0,0,0,0)",
                       font={'color': "#00D8FF"})
     return fig
 
@@ -206,7 +210,6 @@ else:
     t_avg = (float(latest.get('T1', 0)) + float(latest.get('T2', 0)) + float(latest.get('T3', 0))) / 3.0
     w_avg = (float(latest.get('W1', 0)) + float(latest.get('W2', 0)) + float(latest.get('W3', 0))) / 3.0
 
-    # [关键修改] 使用 gap="small" 减少列间隙，调整宽度比例让左右两边更丰满
     col_left, col_center, col_right = st.columns([1.25, 2.3, 1.25], gap="small")
 
     # ------------------ 左栏 ------------------
@@ -229,29 +232,27 @@ else:
             dual_card("靶材物料与环境状态数据", "当前重量 (ZL)", f"{latest.get('ZL', 0):.1f}", "g", "平均湿度 (W_AVG)",
                       f"{w_avg:.1f}", "%"), unsafe_allow_html=True)
 
-    # ------------------ 中栏：严格高度控制以实现齐底 ------------------
+    # ------------------ 中栏 ------------------
     with col_center:
-        st.markdown('<div class="dc-title" style="margin-bottom: 0px;">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>',
+        st.markdown('<div class="dc-title" style="margin-bottom: 5px;">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>',
                     unsafe_allow_html=True)
-        st.markdown(
-            '<div style="color: rgba(51, 153, 255, 0.4); font-size: 10px; font-family: monospace; letter-spacing: 2px; margin-bottom: 5px; margin-left: 10px;">>> 深度工艺网络系统网络图</div>',
-            unsafe_allow_html=True)
 
         IMAGE_RAW_URL = "https://raw.githubusercontent.com/kdb123-zd/Digital-Twin-Drying-System/main/twin_model.jpg"
 
-        # [关键修改] 限制 max-height 为 280px，彻底防止中间一列总高度超标导致报警卡片掉下去
         st.markdown(f"""
         <div style="text-align: center; width: 100%; margin-top: 0px; margin-bottom: 5px; position: relative;">
             <img src="{IMAGE_RAW_URL}" style="width: 90%; max-height: 280px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
         </div>
         """, unsafe_allow_html=True)
 
-        # 仪表盘
+        # [核心修复3] 在调用函数时传入 dtick 参数。真空度每 20000 标一个，开度每 20 标一个。
         cg1, cg2 = st.columns(2)
-        with cg1: st.plotly_chart(create_gauge(latest.get('ZKD', 0), "绝对真空度 (ZKD)", 120000, "#00D8FF", " Pa"),
-                                  width="stretch")
-        with cg2: st.plotly_chart(create_gauge(latest.get('PZFKD', 0), "电子膨胀阀开度 (PZFKD)", 100, "#22D3EE", " %"),
-                                  width="stretch")
+        with cg1: st.plotly_chart(
+            create_gauge(latest.get('ZKD', 0), "绝对真空度 (ZKD)", 120000, "#00D8FF", " Pa", dtick=20000),
+            width="stretch")
+        with cg2: st.plotly_chart(
+            create_gauge(latest.get('PZFKD', 0), "电子膨胀阀开度 (PZFKD)", 100, "#22D3EE", " %", dtick=20),
+            width="stretch")
 
         # 警报矩阵
         pout_cls, pout_led = ("alert-danger", "led-red") if pout > HIGH_POUT_LIMIT else ("alert-safe", "led-green")
