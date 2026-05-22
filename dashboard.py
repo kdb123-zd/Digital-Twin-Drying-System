@@ -10,6 +10,7 @@ import json
 # ==========================================
 # 1. 页面基本配置
 # ==========================================
+# layout="wide" 让网页全屏铺满
 st.set_page_config(page_title="Bertram Digital Twin", layout="wide", initial_sidebar_state="collapsed")
 
 # ==========================================
@@ -37,19 +38,16 @@ def start_mqtt_client():
             payload = json.loads(msg.payload.decode('utf-8'))
             sensors = payload.get("temperature", payload)
             if isinstance(sensors, dict):
-                # 统一转大写，防止下位机大小写漂移
                 sensors = {k.upper().strip(): float(v) for k, v in sensors.items() if
                            isinstance(v, (int, float, str)) and k != "TIME_STAMP"}
                 sensors['TIME_STAMP'] = datetime.now()
 
                 data_buffer.append(sensors)
-                # 内存保护：云端仅保留最近 500 条数据用于波形渲染
                 if len(data_buffer) > 500:
                     data_buffer.pop(0)
         except Exception as e:
             pass
 
-    # 兼容不同版本的 paho-mqtt
     try:
         client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="streamlit_cloud_viewer_001")
     except AttributeError:
@@ -61,46 +59,51 @@ def start_mqtt_client():
     client.on_message = on_message
 
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
-    client.loop_start()  # 在后台线程启动监听，不阻塞网页
+    client.loop_start()
 
     return data_buffer
 
 
-# 获取后台持续更新的数据池
 sensor_data_pool = start_mqtt_client()
 
 # ==========================================
-# 🎨 3. 高级数字孪生 CSS 引擎
+# 🎨 3. 高级数字孪生 CSS 引擎 (极致紧凑版)
 # ==========================================
 st.markdown("""
 <style>
+    /* 调整整体背景和隐藏默认头部留白 */
     .stApp { background: radial-gradient(circle at center top, #0A1428 0%, #030712 100%); font-family: 'Segoe UI', sans-serif; }
     header {visibility: hidden;}
-    .main-title { text-align: center; color: #E2E8F0; font-size: 34px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -40px; margin-bottom: 25px; }
+    .block-container { padding-top: 1rem; padding-bottom: 0rem; }
 
-    .dual-card { background: linear-gradient(180deg, rgba(16, 33, 65, 0.6) 0%, rgba(5, 12, 25, 0.8) 100%); border: 1px solid rgba(0, 216, 255, 0.25); border-radius: 10px; padding: 12px 8px; margin-bottom: 16px; box-shadow: inset 0 0 15px rgba(0, 216, 255, 0.03), 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.2s; }
-    .dc-title { color: #3399FF; font-size: 13px; font-weight: bold; margin-bottom: 5px; margin-left: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(51, 153, 255, 0.4); }
+    /* 缩小大标题的边距，整体向上提 */
+    .main-title { text-align: center; color: #E2E8F0; font-size: 28px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -50px; margin-bottom: 10px; }
+
+    /* [关键修改] 极大压缩卡片的内边距(padding)和外边距(margin-bottom)，防止屏幕超出 */
+    .dual-card { background: linear-gradient(180deg, rgba(16, 33, 65, 0.6) 0%, rgba(5, 12, 25, 0.8) 100%); border: 1px solid rgba(0, 216, 255, 0.25); border-radius: 8px; padding: 6px 5px; margin-bottom: 10px; box-shadow: inset 0 0 15px rgba(0, 216, 255, 0.03), 0 2px 5px rgba(0,0,0,0.5); }
+    .dc-title { color: #3399FF; font-size: 12px; font-weight: bold; margin-bottom: 3px; margin-left: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(51, 153, 255, 0.4); }
     .dc-row { display: flex; justify-content: space-evenly; align-items: center; }
     .dc-item { text-align: center; flex: 1; }
-    .dc-divider { width: 1px; height: 35px; background: rgba(0, 216, 255, 0.2); }
-    .dc-label { color: #94A3B8; font-size: 11px; margin-bottom: 2px; }
-    .dc-value { color: #00D8FF; font-size: 24px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 216, 255, 0.4); }
-    .dc-unit { font-size: 11px; color: #64748B; font-weight: normal; }
+    .dc-divider { width: 1px; height: 30px; background: rgba(0, 216, 255, 0.2); }
+    .dc-label { color: #94A3B8; font-size: 10px; margin-bottom: 0px; }
+    .dc-value { color: #00D8FF; font-size: 20px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 216, 255, 0.4); }
+    .dc-unit { font-size: 10px; color: #64748B; font-weight: normal; }
 
-    .alert-matrix { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; margin-bottom: 0px; }
-    .alert-box { flex: 1; padding: 12px 5px; border-radius: 8px; text-align: center; background: rgba(10, 20, 40, 0.8); border: 1px solid; display: flex; flex-direction: column; align-items: center; }
+    /* [关键修改] 报警矩阵极致压缩，高度匹配 */
+    .alert-matrix { display: flex; justify-content: space-between; gap: 6px; margin-top: 5px; margin-bottom: 0px; }
+    .alert-box { flex: 1; padding: 6px 2px; border-radius: 6px; text-align: center; background: rgba(10, 20, 40, 0.8); border: 1px solid; display: flex; flex-direction: column; align-items: center; justify-content: center;}
     .alert-safe { border-color: rgba(16, 185, 129, 0.3); }
     .alert-danger { border-color: rgba(239, 68, 68, 0.8); background: rgba(239, 68, 68, 0.1); }
     .alert-warn { border-color: rgba(245, 158, 11, 0.8); }
-    .led-bulb { width: 16px; height: 16px; border-radius: 50%; margin-bottom: 8px; }
-    .led-green { background-color: #10B981; box-shadow: 0 0 10px #10B981, inset 0 0 5px rgba(255,255,255,0.5); }
+    .led-bulb { width: 12px; height: 12px; border-radius: 50%; margin-bottom: 4px; }
+    .led-green { background-color: #10B981; box-shadow: 0 0 10px #10B981; }
     .led-yellow { background-color: #F59E0B; box-shadow: 0 0 15px #F59E0B; animation: pulse-yellow 1.5s infinite; }
     .led-red { background-color: #EF4444; box-shadow: 0 0 15px #EF4444; animation: pulse-red 0.8s infinite; }
-    @keyframes pulse-red { 0% { box-shadow: 0 0 10px #EF4444; } 50% { box-shadow: 0 0 25px #EF4444; } 100% { box-shadow: 0 0 10px #EF4444; } }
-    @keyframes pulse-yellow { 0% { box-shadow: 0 0 10px #F59E0B; } 50% { box-shadow: 0 0 20px #F59E0B; } 100% { box-shadow: 0 0 10px #F59E0B; } }
-    .alert-title { color: #E2E8F0; font-size: 12px; margin-top: 2px; }
-    .alert-val { font-size: 15px; font-weight: bold; margin-top: 2px; }
-    hr { border-top: 1px solid rgba(0, 216, 255, 0.15); margin: 15px 0; }
+    @keyframes pulse-red { 0% { box-shadow: 0 0 5px #EF4444; } 50% { box-shadow: 0 0 20px #EF4444; } 100% { box-shadow: 0 0 5px #EF4444; } }
+    @keyframes pulse-yellow { 0% { box-shadow: 0 0 5px #F59E0B; } 50% { box-shadow: 0 0 15px #F59E0B; } 100% { box-shadow: 0 0 5px #F59E0B; } }
+    .alert-title { color: #E2E8F0; font-size: 11px; margin-top: 0px; }
+    .alert-val { font-size: 13px; font-weight: bold; margin-top: 0px; }
+    hr { border-top: 1px solid rgba(0, 216, 255, 0.15); margin: 10px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -143,15 +146,15 @@ def dual_card(title, l1, v1, u1, l2, v2, u2):
 
 
 def create_gauge(value, title, max_val, color, suffix=""):
-    # [修改核心] t: 30 -> 50 给标题留出足够空间，不再切头。height: 170 -> 190 画板整体拉高
+    # [关键修改] 留足顶部空间t=45防止切字，整体高度压缩为160px省空间
     fig = go.Figure(
-        go.Indicator(mode="gauge+number", value=value, number={'suffix': suffix, 'font': {'color': color, 'size': 24}},
-                     title={'text': title, 'font': {'color': '#3399FF', 'size': 13}}, gauge={
+        go.Indicator(mode="gauge+number", value=value, number={'suffix': suffix, 'font': {'color': color, 'size': 20}},
+                     title={'text': title, 'font': {'color': '#3399FF', 'size': 12}}, gauge={
                 'axis': {'range': [None, max_val], 'tickwidth': 1, 'tickcolor': "#3399FF",
                          'tickfont': {'color': '#94A3B8'}}, 'bar': {'color': color}, 'bgcolor': "rgba(0,0,0,0)",
                 'borderwidth': 1, 'bordercolor': "rgba(0, 216, 255, 0.2)",
                 'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]}))
-    fig.update_layout(height=190, margin=dict(l=10, r=10, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(height=160, margin=dict(l=10, r=10, t=45, b=0), paper_bgcolor="rgba(0,0,0,0)",
                       font={'color': "#00D8FF"})
     return fig
 
@@ -167,14 +170,14 @@ def create_tech_line_chart(plot_df, title, y_title=""):
         fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], mode='lines', name=col,
                                  line=dict(width=2.5, color=colors[i % len(colors)], shape='spline'), fill='tozeroy',
                                  fillcolor=fills[i % len(fills)], hoverinfo='x+y+name'))
-    fig.update_layout(title=dict(text=f"◈ {title}", font=dict(color='#E2E8F0', size=15)), paper_bgcolor='rgba(0,0,0,0)',
-                      plot_bgcolor='rgba(10,20,40,0.5)', font=dict(color='#94A3B8', size=11),
+    fig.update_layout(title=dict(text=f"◈ {title}", font=dict(color='#E2E8F0', size=14)), paper_bgcolor='rgba(0,0,0,0)',
+                      plot_bgcolor='rgba(10,20,40,0.5)', font=dict(color='#94A3B8', size=10),
                       xaxis=dict(showgrid=True, gridcolor='rgba(0, 216, 255, 0.1)', zeroline=False,
                                  tickformat="%H:%M:%S"),
                       yaxis=dict(title=y_title, showgrid=True, gridcolor='rgba(0, 216, 255, 0.1)', zeroline=False),
-                      margin=dict(l=30, r=20, t=40, b=10),
+                      margin=dict(l=30, r=20, t=35, b=10),
                       legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5,
-                                  font=dict(color='#E2E8F0')), hovermode="x unified", height=280)
+                                  font=dict(color='#E2E8F0')), hovermode="x unified", height=240)
     return fig
 
 
@@ -203,7 +206,8 @@ else:
     t_avg = (float(latest.get('T1', 0)) + float(latest.get('T2', 0)) + float(latest.get('T3', 0))) / 3.0
     w_avg = (float(latest.get('W1', 0)) + float(latest.get('W2', 0)) + float(latest.get('W3', 0))) / 3.0
 
-    col_left, col_center, col_right = st.columns([1.1, 2.5, 1.1])
+    # [关键修改] 使用 gap="small" 减少列间隙，调整宽度比例让左右两边更丰满
+    col_left, col_center, col_right = st.columns([1.25, 2.3, 1.25], gap="small")
 
     # ------------------ 左栏 ------------------
     with col_left:
@@ -225,20 +229,20 @@ else:
             dual_card("靶材物料与环境状态数据", "当前重量 (ZL)", f"{latest.get('ZL', 0):.1f}", "g", "平均湿度 (W_AVG)",
                       f"{w_avg:.1f}", "%"), unsafe_allow_html=True)
 
-    # ------------------ 中栏 ------------------
+    # ------------------ 中栏：严格高度控制以实现齐底 ------------------
     with col_center:
-        st.markdown('<div class="dc-title">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>', unsafe_allow_html=True)
+        st.markdown('<div class="dc-title" style="margin-bottom: 0px;">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>',
+                    unsafe_allow_html=True)
         st.markdown(
-            '<div style="color: rgba(51, 153, 255, 0.4); font-size: 11px; font-family: monospace; letter-spacing: 2px; margin-top: -5px; margin-left: 10px;">>> 深度工艺网络系统网络图</div>',
+            '<div style="color: rgba(51, 153, 255, 0.4); font-size: 10px; font-family: monospace; letter-spacing: 2px; margin-bottom: 5px; margin-left: 10px;">>> 深度工艺网络系统网络图</div>',
             unsafe_allow_html=True)
 
-        # 你的 GitHub 仓库原图链接
         IMAGE_RAW_URL = "https://raw.githubusercontent.com/kdb123-zd/Digital-Twin-Drying-System/main/twin_model.jpg"
 
-        # [修改] 配合仪表盘变高，这里的 margin-bottom 缩小到 20px，保持整体高度不变，底部依然对齐
+        # [关键修改] 限制 max-height 为 280px，彻底防止中间一列总高度超标导致报警卡片掉下去
         st.markdown(f"""
-        <div style="text-align: center; width: 100%; margin-top: 5px; margin-bottom: 20px; position: relative;">
-            <img src="{IMAGE_RAW_URL}" style="width: 95%; max-height: 400px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
+        <div style="text-align: center; width: 100%; margin-top: 0px; margin-bottom: 5px; position: relative;">
+            <img src="{IMAGE_RAW_URL}" style="width: 90%; max-height: 280px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
         </div>
         """, unsafe_allow_html=True)
 
@@ -284,8 +288,10 @@ else:
         st.markdown(dual_card("数字化孪生通信网络层", "协议节点名称", "EMQX", "", "传输状态", "实时同步", ""),
                     unsafe_allow_html=True)
 
+    # ------------------ 下方波形图区域 ------------------
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown("<h4 style='color: #00D8FF;'>📉 深度时序波形诊断与趋势趋势分析区</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color: #00D8FF; margin-top:-10px;'>📉 深度时序波形诊断与趋势分析区</h4>",
+                unsafe_allow_html=True)
 
     plot_df = df.copy()
     if 'YSJDL' in plot_df.columns: plot_df['YSJDL'] = plot_df['YSJDL'].rolling(window=10, min_periods=1).mean().round(2)
@@ -294,7 +300,7 @@ else:
     thermo_history = plot_df.apply(calculate_thermodynamics, axis=1)
     plot_df['系统COP'] = thermo_history['COP']
 
-    col_c1, col_c2, col_c3 = st.columns(3)
+    col_c1, col_c2, col_c3 = st.columns(3, gap="small")
     with col_c1:
         keys = [k for k in ['POUT', 'PIN'] if k in plot_df.columns]
         if keys: st.plotly_chart(create_tech_line_chart(plot_df[keys], "系统高低压动态趋势", "压力 (bar)"),
