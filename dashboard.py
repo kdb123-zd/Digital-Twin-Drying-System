@@ -85,7 +85,9 @@ st.markdown("""
     .dc-label { color: #94A3B8; font-size: 11px; margin-bottom: 2px; }
     .dc-value { color: #00D8FF; font-size: 24px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 216, 255, 0.4); }
     .dc-unit { font-size: 11px; color: #64748B; font-weight: normal; }
-    .alert-matrix { display: flex; justify-content: space-between; gap: 10px; margin-top: 5px; margin-bottom: 15px; }
+
+    /* 调整警报矩阵的上边距，使其与上方的仪表盘保持适当距离 */
+    .alert-matrix { display: flex; justify-content: space-between; gap: 10px; margin-top: 15px; margin-bottom: 5px; }
     .alert-box { flex: 1; padding: 12px 5px; border-radius: 8px; text-align: center; background: rgba(10, 20, 40, 0.8); border: 1px solid; display: flex; flex-direction: column; align-items: center; }
     .alert-safe { border-color: rgba(16, 185, 129, 0.3); }
     .alert-danger { border-color: rgba(239, 68, 68, 0.8); background: rgba(239, 68, 68, 0.1); }
@@ -222,7 +224,7 @@ else:
             dual_card("靶材物料与环境状态数据", "当前重量 (ZL)", f"{latest.get('ZL', 0):.1f}", "g", "平均湿度 (W_AVG)",
                       f"{w_avg:.1f}", "%"), unsafe_allow_html=True)
 
-    # ------------------ 中栏：完美融合重构 ------------------
+    # ------------------ 中栏：居中、放大、沉底对齐 ------------------
     with col_center:
         st.markdown('<div class="dc-title">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>', unsafe_allow_html=True)
         st.markdown(
@@ -232,12 +234,10 @@ else:
         # 你的 GitHub 仓库原图链接
         IMAGE_RAW_URL = "https://raw.githubusercontent.com/kdb123-zd/Digital-Twin-Drying-System/main/twin_model.jpg"
 
-        # [优化项 1 & 2] 使用 mix-blend-mode: screen 完美消除图片黑底，让它融入大屏背景
-        # [优化项 3] 控制 max-height 并增加 margin-bottom: 25px 防止遮挡下方仪表盘标题
-        # [优化项 4] 删除了叠加的文字
+        # 【关键教学点：调整说明见下方文本】
         st.markdown(f"""
-        <div style="text-align: center; margin-bottom: 25px; margin-top: 10px; position: relative;">
-            <img src="{IMAGE_RAW_URL}" style="max-width: 100%; max-height: 280px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
+        <div style="text-align: center; height: 440px; display: flex; justify-content: center; align-items: center; margin-top: 5px; margin-bottom: 10px; position: relative;">
+            <img src="{IMAGE_RAW_URL}" style="max-width: 100%; max-height: 420px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
         </div>
         """, unsafe_allow_html=True)
 
@@ -248,7 +248,7 @@ else:
         with cg2: st.plotly_chart(create_gauge(latest.get('PZFKD', 0), "电子膨胀阀开度 (PZFKD)", 100, "#22D3EE", " %"),
                                   width="stretch")
 
-        # [优化项 5] 恢复底部的四个警报矩阵
+        # 警报矩阵
         pout_cls, pout_led = ("alert-danger", "led-red") if pout > HIGH_POUT_LIMIT else ("alert-safe", "led-green")
         pin_cls, pin_led = ("alert-danger", "led-red") if pin < LOW_PIN_LIMIT else ("alert-safe", "led-green")
         sh_cls, sh_led = ("alert-warn", "led-yellow") if (sh < LOW_SH_LIMIT and ysjdl > 1.0) else (
