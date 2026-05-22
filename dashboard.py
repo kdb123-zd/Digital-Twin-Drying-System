@@ -78,7 +78,6 @@ st.markdown("""
     header {visibility: hidden;}
     .main-title { text-align: center; color: #E2E8F0; font-size: 34px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -40px; margin-bottom: 25px; }
 
-    /* [修改项1] 拉长左右两侧卡片的间距(margin-bottom)和内边距(padding)，以此来对齐中间的报警矩阵底部 */
     .dual-card { background: linear-gradient(180deg, rgba(16, 33, 65, 0.6) 0%, rgba(5, 12, 25, 0.8) 100%); border: 1px solid rgba(0, 216, 255, 0.25); border-radius: 10px; padding: 12px 8px; margin-bottom: 16px; box-shadow: inset 0 0 15px rgba(0, 216, 255, 0.03), 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.2s; }
     .dc-title { color: #3399FF; font-size: 13px; font-weight: bold; margin-bottom: 5px; margin-left: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(51, 153, 255, 0.4); }
     .dc-row { display: flex; justify-content: space-evenly; align-items: center; }
@@ -88,7 +87,6 @@ st.markdown("""
     .dc-value { color: #00D8FF; font-size: 24px; font-weight: bold; text-shadow: 0 0 8px rgba(0, 216, 255, 0.4); }
     .dc-unit { font-size: 11px; color: #64748B; font-weight: normal; }
 
-    /* [修改项2] 调整报警矩阵的外边距，保证它被稳稳地压在最底下 */
     .alert-matrix { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; margin-bottom: 0px; }
     .alert-box { flex: 1; padding: 12px 5px; border-radius: 8px; text-align: center; background: rgba(10, 20, 40, 0.8); border: 1px solid; display: flex; flex-direction: column; align-items: center; }
     .alert-safe { border-color: rgba(16, 185, 129, 0.3); }
@@ -145,6 +143,7 @@ def dual_card(title, l1, v1, u1, l2, v2, u2):
 
 
 def create_gauge(value, title, max_val, color, suffix=""):
+    # [修改核心] t: 30 -> 50 给标题留出足够空间，不再切头。height: 170 -> 190 画板整体拉高
     fig = go.Figure(
         go.Indicator(mode="gauge+number", value=value, number={'suffix': suffix, 'font': {'color': color, 'size': 24}},
                      title={'text': title, 'font': {'color': '#3399FF', 'size': 13}}, gauge={
@@ -152,7 +151,7 @@ def create_gauge(value, title, max_val, color, suffix=""):
                          'tickfont': {'color': '#94A3B8'}}, 'bar': {'color': color}, 'bgcolor': "rgba(0,0,0,0)",
                 'borderwidth': 1, 'bordercolor': "rgba(0, 216, 255, 0.2)",
                 'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]}))
-    fig.update_layout(height=170, margin=dict(l=10, r=10, t=30, b=10), paper_bgcolor="rgba(0,0,0,0)",
+    fig.update_layout(height=190, margin=dict(l=10, r=10, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)",
                       font={'color': "#00D8FF"})
     return fig
 
@@ -226,7 +225,7 @@ else:
             dual_card("靶材物料与环境状态数据", "当前重量 (ZL)", f"{latest.get('ZL', 0):.1f}", "g", "平均湿度 (W_AVG)",
                       f"{w_avg:.1f}", "%"), unsafe_allow_html=True)
 
-    # ------------------ 中栏：解决遮挡与完美对齐 ------------------
+    # ------------------ 中栏 ------------------
     with col_center:
         st.markdown('<div class="dc-title">◈ BERTRAM DIGITAL TWIN: 系统架构图</div>', unsafe_allow_html=True)
         st.markdown(
@@ -236,10 +235,9 @@ else:
         # 你的 GitHub 仓库原图链接
         IMAGE_RAW_URL = "https://raw.githubusercontent.com/kdb123-zd/Digital-Twin-Drying-System/main/twin_model.jpg"
 
-        # [修改项3] 彻底去掉了 height 死高度！
-        # 增加了 margin-bottom: 40px，这等于在图片和下方的仪表盘之间垫了一块 40像素 的透明砖头，绝对不会再遮挡仪表盘标题了！
+        # [修改] 配合仪表盘变高，这里的 margin-bottom 缩小到 20px，保持整体高度不变，底部依然对齐
         st.markdown(f"""
-        <div style="text-align: center; width: 100%; margin-top: 5px; margin-bottom: 40px; position: relative;">
+        <div style="text-align: center; width: 100%; margin-top: 5px; margin-bottom: 20px; position: relative;">
             <img src="{IMAGE_RAW_URL}" style="width: 95%; max-height: 400px; object-fit: contain; mix-blend-mode: screen; filter: drop-shadow(0 0 15px rgba(0, 216, 255, 0.3));">
         </div>
         """, unsafe_allow_html=True)
@@ -251,7 +249,7 @@ else:
         with cg2: st.plotly_chart(create_gauge(latest.get('PZFKD', 0), "电子膨胀阀开度 (PZFKD)", 100, "#22D3EE", " %"),
                                   width="stretch")
 
-        # 警报矩阵 (因为上面的图片没有死高度，这个矩阵会被自然地推到最底端，和左右两边平齐)
+        # 警报矩阵
         pout_cls, pout_led = ("alert-danger", "led-red") if pout > HIGH_POUT_LIMIT else ("alert-safe", "led-green")
         pin_cls, pin_led = ("alert-danger", "led-red") if pin < LOW_PIN_LIMIT else ("alert-safe", "led-green")
         sh_cls, sh_led = ("alert-warn", "led-yellow") if (sh < LOW_SH_LIMIT and ysjdl > 1.0) else (
