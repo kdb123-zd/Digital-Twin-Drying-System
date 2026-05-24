@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import CoolProp.CoolProp as CP
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import paho.mqtt.client as mqtt
 import json
 
@@ -38,7 +39,8 @@ def start_mqtt_client():
             if isinstance(sensors, dict):
                 sensors = {k.upper().strip(): float(v) for k, v in sensors.items() if
                            isinstance(v, (int, float, str)) and k != "TIME_STAMP"}
-                sensors['TIME_STAMP'] = datetime.now()
+
+                sensors['TIME_STAMP'] = datetime.utcnow() + timedelta(hours=8)
 
                 data_buffer.append(sensors)
                 if len(data_buffer) > 500:
@@ -73,8 +75,6 @@ st.markdown("""
     header {visibility: hidden;}
     .block-container { padding-top: 1rem; padding-bottom: 0rem; }
 
-    .main-title { text-align: center; color: #E2E8F0; font-size: 28px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6); margin-top: -10px; margin-bottom: 10px; }
-
     .dual-card { background: linear-gradient(180deg, rgba(16, 33, 65, 0.6) 0%, rgba(5, 12, 25, 0.8) 100%); border: 1px solid rgba(0, 216, 255, 0.25); border-radius: 8px; padding: 6px 5px; margin-bottom: 10px; box-shadow: inset 0 0 15px rgba(0, 216, 255, 0.03), 0 2px 5px rgba(0,0,0,0.5); }
     .dc-title { color: #3399FF; font-size: 12px; font-weight: bold; margin-bottom: 3px; margin-left: 5px; text-transform: uppercase; text-shadow: 0 0 5px rgba(51, 153, 255, 0.4); }
     .dc-row { display: flex; justify-content: space-evenly; align-items: center; }
@@ -101,7 +101,19 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-title'>⚡ BERTRAM DIGITAL TWIN: 系统架构图与数据监控</div>", unsafe_allow_html=True)
+# ==========================================
+# ⌚ 动态标题与美化的时钟铭牌
+# ==========================================
+bj_clock_now = (datetime.utcnow() + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
+
+st.markdown(f"""
+<div style='text-align: center; margin-top: -15px; margin-bottom: 15px;'>
+    <span style='color: #E2E8F0; font-size: 28px; font-weight: 800; letter-spacing: 4px; text-shadow: 0 0 15px rgba(0, 216, 255, 0.6);'>⚡ BERTRAM DIGITAL TWIN: 系统架构图与数据监控</span>
+    <span style='display: inline-block; margin-left: 20px; padding: 4px 12px; background: rgba(0, 216, 255, 0.1); border: 1px solid rgba(0, 216, 255, 0.4); border-radius: 4px; color: #00D8FF; font-size: 14px; font-family: monospace; letter-spacing: 1px; vertical-align: middle; box-shadow: 0 0 10px rgba(0, 216, 255, 0.2);'>
+        ⏱️ CST {bj_clock_now}
+    </span>
+</div>
+""", unsafe_allow_html=True)
 
 # ==========================================
 # ⚙️ 4. 系统物理配置与辅助函数
@@ -109,27 +121,25 @@ st.markdown("<div class='main-title'>⚡ BERTRAM DIGITAL TWIN: 系统架构图�
 REFRIGERANT = 'R134a'
 VOLTAGE = 220.0
 POWER_FACTOR = 0.85
-# 注意：这里的物理限制依然是基于传感器的表压设定，无需修改
 HIGH_POUT_LIMIT, LOW_PIN_LIMIT, LOW_SH_LIMIT, HIGH_TCOMO_LIMIT = 16.0, 0.5, 2.0, 95.0
 
 
 def calculate_thermodynamics(row):
     try:
-        # 底层计算本来就将表压转换为了绝对压力 (Pa)，此逻辑完全正确无需改动
-        pin_abs_pa = (float(row.get('PIN', 0)) + 1.01325) * 100000.0
-        pout_abs_pa = (float(row.get('POUT', 0)) + 1.01325) * 100000.0
+        pin_abs = (float(row.get('PIN', 0)) + 1.01325) * 100000.0
+        pout_abs = (float(row.get('POUT', 0)) + 1.01325) * 100000.0
         tcomi_k = float(row.get('TCOMI', 0)) + 273.15
         tcomo_k = float(row.get('TCOMO', 0)) + 273.15
         outcono_k = float(row.get('OUTCONO', 0)) + 273.15
 
-        tsat_in_k = CP.PropsSI('T', 'P', pin_abs_pa, 'Q', 1, REFRIGERANT)
-        tsat_out_k = CP.PropsSI('T', 'P', pout_abs_pa, 'Q', 1, REFRIGERANT)
+        tsat_in_k = CP.PropsSI('T', 'P', pin_abs, 'Q', 1, REFRIGERANT)
+        tsat_out_k = CP.PropsSI('T', 'P', pout_abs, 'Q', 1, REFRIGERANT)
         sh = (tcomi_k - 273.15) - (tsat_in_k - 273.15)
         dsh = (tcomo_k - 273.15) - (tsat_out_k - 273.15)
 
-        h1 = CP.PropsSI('H', 'P', pin_abs_pa, 'T', tcomi_k, REFRIGERANT)
-        h2 = CP.PropsSI('H', 'P', pout_abs_pa, 'T', tcomo_k, REFRIGERANT)
-        h3 = CP.PropsSI('H', 'P', pout_abs_pa, 'T', outcono_k, REFRIGERANT)
+        h1 = CP.PropsSI('H', 'P', pin_abs, 'T', tcomi_k, REFRIGERANT)
+        h2 = CP.PropsSI('H', 'P', pout_abs, 'T', tcomo_k, REFRIGERANT)
+        h3 = CP.PropsSI('H', 'P', pout_abs, 'T', outcono_k, REFRIGERANT)
 
         cop = (h2 - h3) / (h2 - h1) if (h2 - h1) > 0 else 0.0
         return pd.Series({'SH': sh, 'DSH': dsh, 'COP': cop})
@@ -142,21 +152,13 @@ def dual_card(title, l1, v1, u1, l2, v2, u2):
 
 
 def create_gauge(value, title, max_val, color, suffix="", dtick=None):
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=value,
-        number={'suffix': suffix, 'font': {'color': color, 'size': 20}},
-        title={'text': title, 'font': {'color': '#3399FF', 'size': 12}},
-        gauge={
-            'axis': {'range': [None, max_val], 'dtick': dtick, 'tickwidth': 1, 'tickcolor': "#3399FF",
-                     'tickfont': {'color': '#94A3B8'}},
-            'bar': {'color': color},
-            'bgcolor': "rgba(0,0,0,0)",
-            'borderwidth': 1,
-            'bordercolor': "rgba(0, 216, 255, 0.2)",
-            'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]
-        }
-    ))
+    fig = go.Figure(
+        go.Indicator(mode="gauge+number", value=value, number={'suffix': suffix, 'font': {'color': color, 'size': 20}},
+                     title={'text': title, 'font': {'color': '#3399FF', 'size': 12}}, gauge={
+                'axis': {'range': [None, max_val], 'dtick': dtick, 'tickwidth': 1, 'tickcolor': "#3399FF",
+                         'tickfont': {'color': '#94A3B8'}}, 'bar': {'color': color}, 'bgcolor': "rgba(0,0,0,0)",
+                'borderwidth': 1, 'bordercolor': "rgba(0, 216, 255, 0.2)",
+                'steps': [{'range': [0, max_val], 'color': "rgba(10, 20, 40, 0.6)"}]}))
     fig.update_layout(height=175, margin=dict(l=15, r=15, t=45, b=15), paper_bgcolor="rgba(0,0,0,0)",
                       font={'color': "#00D8FF"})
     return fig
@@ -164,11 +166,8 @@ def create_gauge(value, title, max_val, color, suffix="", dtick=None):
 
 def create_tech_line_chart(plot_df, title, y_title=""):
     fig = go.Figure()
-    colors, fills = ['#00D8FF', '#F59E0B', '#10B981', '#C084FC', '#FB7185'], ['rgba(0,216,255,0.1)',
-                                                                              'rgba(245,158,11,0.1)',
-                                                                              'rgba(16,185,129,0.1)',
-                                                                              'rgba(192,132,252,0.1)',
-                                                                              'rgba(251,113,133,0.1)']
+    colors, fills = ['#00D8FF', '#F59E0B', '#10B981'], ['rgba(0,216,255,0.1)', 'rgba(245,158,11,0.1)',
+                                                        'rgba(16,185,129,0.1)']
     for i, col in enumerate(plot_df.columns):
         fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], mode='lines', name=col,
                                  line=dict(width=2.5, color=colors[i % len(colors)], shape='spline'), fill='tozeroy',
@@ -184,6 +183,57 @@ def create_tech_line_chart(plot_df, title, y_title=""):
     return fig
 
 
+def create_dual_y_chart(plot_df, title):
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    if '系统总功耗(kW)' in plot_df.columns:
+        fig.add_trace(
+            go.Scatter(x=plot_df.index, y=plot_df['系统总功耗(kW)'], mode='lines', name='总功耗 (kW)',
+                       line=dict(width=2.5, color='#C084FC', shape='spline'), fill='tozeroy',
+                       fillcolor='rgba(192,132,252,0.08)'),
+            secondary_y=False
+        )
+
+    if '系统COP' in plot_df.columns:
+        fig.add_trace(
+            go.Scatter(x=plot_df.index, y=plot_df['系统COP'], mode='lines', name='系统 COP',
+                       line=dict(width=2.5, color='#FB7185', shape='spline'), fill='tozeroy',
+                       fillcolor='rgba(251,113,133,0.08)'),
+            secondary_y=True
+        )
+
+    # [关键修复] 弃用 titlefont，使用标准 Plotly 字典结构：title=dict(text="...", font=dict(...))
+    fig.update_layout(
+        title=dict(text=f"◈ {title}", font=dict(color='#E2E8F0', size=14)),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(10,20,40,0.5)',
+        font=dict(color='#94A3B8', size=10),
+        xaxis=dict(showgrid=True, gridcolor='rgba(0, 216, 255, 0.1)', zeroline=False, tickformat="%H:%M:%S"),
+
+        # 修复后的左侧 Y 轴配置
+        yaxis=dict(
+            title=dict(text="总功耗 (kW)", font=dict(color='#C084FC')),
+            showgrid=True,
+            gridcolor='rgba(0, 216, 255, 0.1)',
+            zeroline=False,
+            tickfont=dict(color='#C084FC')
+        ),
+        # 修复后的右侧 Y 轴配置
+        yaxis2=dict(
+            title=dict(text="热力学性能系数 (COP)", font=dict(color='#FB7185')),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(color='#FB7185')
+        ),
+
+        margin=dict(l=35, r=35, t=35, b=10),
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5, font=dict(color='#E2E8F0')),
+        hovermode="x unified",
+        height=240
+    )
+    return fig
+
+
 # ==========================================
 # 📊 5. 数据流处理与界面渲染
 # ==========================================
@@ -195,12 +245,10 @@ else:
     df.set_index('TIME_STAMP', inplace=True)
     latest = df.iloc[-1]
 
-    # 获取原始表压数据
     pout, pin, tcomo, ysjdl = latest.get('POUT', 0), latest.get('PIN', 0), latest.get('TCOMO', 0), latest.get('YSJDL',
                                                                                                               0)
     zkbdl = latest.get('ZKBDL', 0)
 
-    # [修改点1：衍生计算当前帧的绝对压力用于 UI 显示]
     pin_abs_ui = pin + 1.01325
     pout_abs_ui = pout + 1.01325
 
@@ -218,7 +266,6 @@ else:
 
     # ------------------ 左栏 ------------------
     with col_left:
-        # [修改点2：将左侧卡片的数据源更换为 pin_abs_ui 和 pout_abs_ui]
         st.markdown(dual_card("吸排气绝对压力监控", "吸气 (PIN_ABS)", f"{pin_abs_ui:.2f}", "bar", "排气 (POUT_ABS)",
                               f"{pout_abs_ui:.2f}", "bar"), unsafe_allow_html=True)
         st.markdown(
@@ -257,14 +304,12 @@ else:
             create_gauge(latest.get('PZFKD', 0), "电子膨胀阀开度 (PZFKD)", 100, "#22D3EE", " %", dtick=20),
             width="stretch")
 
-        # 警报逻辑的判断阈值依然使用 pout, pin 等原始表压（不破坏安全判断逻辑）
         pout_cls, pout_led = ("alert-danger", "led-red") if pout > HIGH_POUT_LIMIT else ("alert-safe", "led-green")
         pin_cls, pin_led = ("alert-danger", "led-red") if pin < LOW_PIN_LIMIT else ("alert-safe", "led-green")
         sh_cls, sh_led = ("alert-warn", "led-yellow") if (sh < LOW_SH_LIMIT and ysjdl > 1.0) else (
         "alert-safe", "led-green")
         tcomo_cls, tcomo_led = ("alert-danger", "led-red") if tcomo > HIGH_TCOMO_LIMIT else ("alert-safe", "led-green")
 
-        # [修改点3：警报矩阵的显示值（{pout_abs_ui:.2f}）替换为绝对压力，同时文字加上(绝压)防混淆]
         st.markdown(f"""
         <div class="alert-matrix">
             <div class="alert-box {pout_cls}"><div class="led-bulb {pout_led}"></div><div class="alert-title">高压排气(绝压)</div><div class="alert-val" style="color: {'#EF4444' if pout > HIGH_POUT_LIMIT else '#10B981'};">{pout_abs_ui:.2f} bar</div></div>
@@ -305,13 +350,11 @@ else:
     thermo_history = plot_df.apply(calculate_thermodynamics, axis=1)
     plot_df['系统COP'] = thermo_history['COP']
 
-    # [修改点4：在画图的数据池中，新增两列绝对压力历史数据]
     if 'PIN' in plot_df.columns: plot_df['PIN_ABS'] = plot_df['PIN'] + 1.01325
     if 'POUT' in plot_df.columns: plot_df['POUT_ABS'] = plot_df['POUT'] + 1.01325
 
     col_c1, col_c2, col_c3 = st.columns(3, gap="small")
     with col_c1:
-        # [修改点4-2：波形图的喂食数据从原本的 POUT/PIN 改为了新的 POUT_ABS/PIN_ABS]
         keys = [k for k in ['POUT_ABS', 'PIN_ABS'] if k in plot_df.columns]
         if keys: st.plotly_chart(create_tech_line_chart(plot_df[keys], "系统绝对压力动态趋势", "绝对压力 (bar)"),
                                  width="stretch")
@@ -320,9 +363,7 @@ else:
         if keys: st.plotly_chart(create_tech_line_chart(plot_df[keys], "换热侧与物料温升逼近趋势", "温度 (℃)"),
                                  width="stretch")
     with col_c3:
-        keys = [k for k in ['系统总功耗(kW)', '系统COP'] if k in plot_df.columns]
-        if keys: st.plotly_chart(create_tech_line_chart(plot_df[keys], "COP能效与系统功耗交叉趋势评估", "数值"),
-                                 width="stretch")
+        st.plotly_chart(create_dual_y_chart(plot_df, "COP能效与系统功耗交叉趋势评估"), width="stretch")
 
 # 心跳刷新
 time.sleep(2)
